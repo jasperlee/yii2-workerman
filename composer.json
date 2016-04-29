@@ -1,6 +1,6 @@
 {
-    "name"  : "workerman/workerman",
-    "type"  : "project",
+    "name"  : "myweishanli/yii2-workerman",
+    "type"  : "yii2-extension",
     "keywords": ["event-loop", "asynchronous"],
     "homepage": "http://www.workerman.net",
     "license" : "MIT",
@@ -21,13 +21,14 @@
         "source": "https://github.com/walkor/workerman"
     },
     "require": {
-        "php": ">=5.3"
+        "php": ">=5.4.0",
+        "yiisoft/yii2": ">=2.0.6"
     },
     "suggest": {
 	"ext-libevent": "For better performance."
     },
     "autoload": {
-        "psr-4": {"Workerman\\": "./"}
+        "psr-4": {"wsl\\rbac\\": "./"}
     },
     "minimum-stability":"dev"
 }

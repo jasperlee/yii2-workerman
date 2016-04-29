@@ -1,5 +1,5 @@
 <?php
-namespace Workerman\Protocols;
+namespace wsl\workerman\Protocols;
 
 /**
  * Websocket protocol for client.
@@ -275,7 +275,7 @@ class Ws
     /**
      * Send websocket handshake.
      *
-     * @param \Workerman\Connection\TcpConnection $connection
+     * @param \wsl\workerman\Connection\TcpConnection $connection
      * @return void 
      */
     public static function sendHandshake($connection)
@@ -304,7 +304,7 @@ class Ws
      * Websocket handshake.
      *
      * @param string                              $buffer
-     * @param \Workerman\Connection\TcpConnection $connection
+     * @param \wsl\workerman\Connection\TcpConnection $connection
      * @return int
      */
     public static function dealHandshake($buffer, $connection)
@@ -328,9 +328,9 @@ class Ws
             }
             // Headbeat.
             if (!empty($connection->websocketPingInterval)) {
-                $connection->websocketPingTimer = \Workerman\Lib\Timer::add($connection->websocketPingInterval, function() use ($connection){
+                $connection->websocketPingTimer = \wsl\workerman\Lib\Timer::add($connection->websocketPingInterval, function() use ($connection){
                     if (false === $connection->send(pack('H*', '8900'), true)) {
-                        \Workerman\Lib\Timer::del($connection->websocketPingTimer);
+                        \wsl\workerman\Lib\Timer::del($connection->websocketPingTimer);
                     }
                 });
             }

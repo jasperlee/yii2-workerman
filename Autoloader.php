@@ -11,7 +11,7 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman;
+namespace wsl\workerman;
 
 /**
  * Autoload.
@@ -66,4 +66,4 @@ class Autoloader
     }
 }
 
-spl_autoload_register('\Workerman\Autoloader::loadByNamespace');
+spl_autoload_register('\wsl\workerman\Autoloader::loadByNamespace');

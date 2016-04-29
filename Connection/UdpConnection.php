@@ -11,7 +11,7 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman\Connection;
+namespace wsl\workerman\Connection;
 
 /**
  * UdpConnection.
@@ -22,7 +22,7 @@ class UdpConnection extends ConnectionInterface
      * Application layer protocol.
      * The format is like this Workerman\\Protocols\\Http.
      *
-     * @var \Workerman\Protocols\ProtocolInterface
+     * @var \wsl\workerman\Protocols\ProtocolInterface
      */
     public $protocol = null;
 

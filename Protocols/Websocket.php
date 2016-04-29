@@ -11,14 +11,14 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman\Protocols;
+namespace wsl\workerman\Protocols;
 
-use Workerman\Connection\ConnectionInterface;
+use wsl\workerman\Connection\ConnectionInterface;
 
 /**
  * WebSocket protocol.
  */
-class Websocket implements \Workerman\Protocols\ProtocolInterface
+class Websocket implements \wsl\workerman\Protocols\ProtocolInterface
 {
     /**
      * Minimum head length of websocket protocol.
@@ -286,7 +286,7 @@ class Websocket implements \Workerman\Protocols\ProtocolInterface
      * Websocket handshake.
      *
      * @param string                              $buffer
-     * @param \Workerman\Connection\TcpConnection $connection
+     * @param \wsl\workerman\Connection\TcpConnection $connection
      * @return int
      */
     protected static function dealHandshake($buffer, $connection)

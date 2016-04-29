@@ -11,16 +11,18 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman;
+namespace wsl\workerman;
 
 require_once __DIR__ . '/Lib/Constants.php';
 
-use Workerman\Events\EventInterface;
-use Workerman\Connection\ConnectionInterface;
-use Workerman\Connection\TcpConnection;
-use Workerman\Connection\UdpConnection;
-use Workerman\Lib\Timer;
 use Exception;
+use wsl\workerman\Connection\ConnectionInterface;
+use wsl\workerman\Connection\TcpConnection;
+use wsl\workerman\Connection\UdpConnection;
+use wsl\workerman\Events\EventInterface;
+use wsl\workerman\Lib\Timer;
+use wsl\workerman\models\Workerman;
+use Yii;
 
 /**
  * Worker class
@@ -240,20 +242,6 @@ class Worker
     public static $stdoutFile = '/dev/null';
 
     /**
-     * The file to store master process PID.
-     *
-     * @var string
-     */
-    public static $pidFile = '';
-
-    /**
-     * Log file.
-     *
-     * @var mixed
-     */
-    public static $logFile = '';
-
-    /**
      * Global event loop.
      *
      * @var Events\EventInterface
@@ -367,7 +355,7 @@ class Worker
      * @var array
      */
     protected static $_globalStatistics = array(
-        'start_timestamp'  => 0,
+        'start_timestamp' => 0,
         'worker_exit_info' => array()
     );
 
@@ -395,14 +383,14 @@ class Worker
      * @var array
      */
     protected static $_builtinTransports = array(
-        'tcp'   => 'tcp',
-        'udp'   => 'udp',
-        'unix'  => 'unix',
-        'ssl'   => 'tcp',
-        'tsl'   => 'tcp',
+        'tcp' => 'tcp',
+        'udp' => 'udp',
+        'unix' => 'unix',
+        'ssl' => 'tcp',
+        'tsl' => 'tcp',
         'sslv2' => 'tcp',
         'sslv3' => 'tcp',
-        'tls'   => 'tcp'
+        'tls' => 'tcp'
     );
 
     /**
@@ -446,27 +434,15 @@ class Worker
     protected static function init()
     {
         // Start file.
-        $backtrace        = debug_backtrace();
+        $backtrace = debug_backtrace();
         self::$_startFile = $backtrace[count($backtrace) - 1]['file'];
-
-        // Pid file.
-        if (empty(self::$pidFile)) {
-            self::$pidFile = __DIR__ . "/../" . str_replace('/', '_', self::$_startFile) . ".pid";
-        }
-
-        // Log file.
-        if (empty(self::$logFile)) {
-            self::$logFile = __DIR__ . '/../workerman.log';
-        }
-        touch(self::$logFile);
-        chmod(self::$logFile, 0622);
 
         // State.
         self::$_status = self::STATUS_STARTING;
 
         // For statistics.
         self::$_globalStatistics['start_timestamp'] = time();
-        self::$_statisticsFile                      = sys_get_temp_dir() . '/workerman.status';
+        self::$_statisticsFile = sys_get_temp_dir() . '/workerman.status';
 
         // Process title.
         self::setProcessTitle('WorkerMan: master process  start_file=' . self::$_startFile);
@@ -508,7 +484,7 @@ class Worker
                 $worker->user = self::getCurrentUser();
             } else {
                 if (posix_getuid() !== 0 && $worker->user != self::getCurrentUser()) {
-                    self::log('Warning: You must have the root privileges to change uid and gid.');
+                    Yii::warning('Warning: You must have the root privileges to change uid and gid.', 'workerman');
                 }
             }
 
@@ -593,7 +569,7 @@ class Worker
         }
 
         // Get command.
-        $command  = trim($argv[1]);
+        $command = trim($argv[1]);
         $command2 = isset($argv[2]) ? $argv[2] : '';
 
         // Start command.
@@ -605,19 +581,25 @@ class Worker
                 $mode = 'in DEBUG mode';
             }
         }
-        self::log("Workerman[$start_file] $command $mode");
+        Yii::info("Workerman[$start_file] $command $mode", 'workerman');
 
-        // Get master process PID.
-        $master_pid      = @file_get_contents(self::$pidFile);
-        $master_is_alive = $master_pid && @posix_kill($master_pid, 0);
+        $master_is_alive = false;
+        foreach (self::$_workers as $worker) {
+            $workermanModel = self::getWorkermanByName($worker->name);
+            if ($workermanModel) {
+                $master_is_alive = true;
+                @posix_kill($workermanModel->pid, 0);
+            }
+        }
+
         // Master is still alive?
         if ($master_is_alive) {
             if ($command === 'start') {
-                self::log("Workerman[$start_file] already running");
+                Yii::info("Workerman[$start_file] already running", 'workerman');
                 exit;
             }
         } elseif ($command !== 'start' && $command !== 'restart' && $command !== 'kill') {
-            self::log("Workerman[$start_file] not run");
+            Yii::info("Workerman[$start_file] not run", 'workerman');
             exit;
         }
 
@@ -638,7 +620,12 @@ class Worker
                     @unlink(self::$_statisticsFile);
                 }
                 // Master process will send status signal to all child processes.
-                posix_kill($master_pid, SIGUSR2);
+                foreach (self::$_workers as $worker) {
+                    $workermanModel = self::getWorkermanByName($worker->name);
+                    if ($workermanModel) {
+                        posix_kill($workermanModel->pid, SIGUSR2);
+                    }
+                }
                 // Waiting amoment.
                 usleep(100000);
                 // Display statisitcs data from a disk file.
@@ -646,19 +633,32 @@ class Worker
                 exit(0);
             case 'restart':
             case 'stop':
-                self::log("Workerman[$start_file] is stoping ...");
+                Yii::info("Workerman[$start_file] is stoping ...", 'workerman');
                 // Send stop signal to master process.
-                $master_pid && posix_kill($master_pid, SIGINT);
+                foreach (self::$_workers as $worker) {
+                    $workermanModel = self::getWorkermanByName($worker->name);
+                    if ($workermanModel) {
+                        posix_kill($workermanModel->pid, SIGINT);
+                    }
+                }
                 // Timeout.
-                $timeout    = 5;
+                $timeout = 5;
                 $start_time = time();
                 // Check master process is still alive?
                 while (1) {
-                    $master_is_alive = $master_pid && posix_kill($master_pid, 0);
+                    $master_is_alive = true;
+                    foreach (self::$_workers as $worker) {
+                        $workermanModel = self::getWorkermanByName($worker->name);
+                        if ($workermanModel) {
+                            if (!posix_kill($workermanModel->pid, 0)) {
+                                $master_is_alive = false;
+                            }
+                        }
+                    }
                     if ($master_is_alive) {
                         // Timeout?
                         if (time() - $start_time >= $timeout) {
-                            self::log("Workerman[$start_file] stop fail");
+                            Yii::info("Workerman[$start_file] stop fail", 'workerman');
                             exit;
                         }
                         // Waiting amoment.
@@ -666,7 +666,7 @@ class Worker
                         continue;
                     }
                     // Stop success.
-                    self::log("Workerman[$start_file] stop success");
+                    Yii::info("Workerman[$start_file] stop success", 'workerman');
                     if ($command === 'stop') {
                         exit(0);
                     }
@@ -677,8 +677,13 @@ class Worker
                 }
                 break;
             case 'reload':
-                posix_kill($master_pid, SIGUSR1);
-                self::log("Workerman[$start_file] reload");
+                foreach (self::$_workers as $worker) {
+                    $workermanModel = self::getWorkermanByName($worker->name);
+                    if ($workermanModel) {
+                        posix_kill($workermanModel->pid, SIGUSR1);
+                    }
+                }
+                Yii::info("Workerman[$start_file] reload", 'workerman');
                 exit;
             default :
                 exit("Usage: php yourfile.php {start|stop|restart|reload|status|kill}\n");
@@ -693,11 +698,11 @@ class Worker
     protected static function installSignal()
     {
         // stop
-        pcntl_signal(SIGINT, array('\Workerman\Worker', 'signalHandler'), false);
+        pcntl_signal(SIGINT, array('\wsl\workerman\Worker', 'signalHandler'), false);
         // reload
-        pcntl_signal(SIGUSR1, array('\Workerman\Worker', 'signalHandler'), false);
+        pcntl_signal(SIGUSR1, array('\wsl\workerman\Worker', 'signalHandler'), false);
         // status
-        pcntl_signal(SIGUSR2, array('\Workerman\Worker', 'signalHandler'), false);
+        pcntl_signal(SIGUSR2, array('\wsl\workerman\Worker', 'signalHandler'), false);
         // ignore
         pcntl_signal(SIGPIPE, SIG_IGN, false);
     }
@@ -716,11 +721,11 @@ class Worker
         // uninstall  status signal handler
         pcntl_signal(SIGUSR2, SIG_IGN, false);
         // reinstall stop signal handler
-        self::$globalEvent->add(SIGINT, EventInterface::EV_SIGNAL, array('\Workerman\Worker', 'signalHandler'));
+        self::$globalEvent->add(SIGINT, EventInterface::EV_SIGNAL, array('\wsl\workerman\Worker', 'signalHandler'));
         //  uninstall  reload signal handler
-        self::$globalEvent->add(SIGUSR1, EventInterface::EV_SIGNAL, array('\Workerman\Worker', 'signalHandler'));
+        self::$globalEvent->add(SIGUSR1, EventInterface::EV_SIGNAL, array('\wsl\workerman\Worker', 'signalHandler'));
         // uninstall  status signal handler
-        self::$globalEvent->add(SIGUSR2, EventInterface::EV_SIGNAL, array('\Workerman\Worker', 'signalHandler'));
+        self::$globalEvent->add(SIGUSR2, EventInterface::EV_SIGNAL, array('\wsl\workerman\Worker', 'signalHandler'));
     }
 
     /**
@@ -807,8 +812,20 @@ class Worker
     protected static function saveMasterPid()
     {
         self::$_masterPid = posix_getpid();
-        if (false === @file_put_contents(self::$pidFile, self::$_masterPid)) {
-            throw new Exception('can not save pid to ' . self::$pidFile);
+
+        foreach (self::$_workers as $worker) {
+            Yii::$app->db->close();
+            Yii::$app->db->open();
+            $workermanModel = new Workerman();
+            $workermanModel->pid = self::$_masterPid;
+            $workermanModel->name = $worker->name;
+            if (!$workermanModel->save()) {
+                foreach ($workermanModel->errors as $field) {
+                    foreach ($field as $message) {
+                        throw new Exception('can not save pid to ' . $message);
+                    }
+                }
+            }
         }
     }
 
@@ -882,7 +899,7 @@ class Worker
         // For master process.
         if ($pid > 0) {
             self::$_pidMap[$worker->workerId][$pid] = $pid;
-            self::$_idMap[$worker->workerId][$id]   = $pid;
+            self::$_idMap[$worker->workerId][$id] = $pid;
         } // For child processes.
         elseif (0 === $pid) {
             if ($worker->reusePort) {
@@ -891,7 +908,7 @@ class Worker
             if (self::$_status === self::STATUS_STARTING) {
                 self::resetStd();
             }
-            self::$_pidMap  = array();
+            self::$_pidMap = array();
             self::$_workers = array($worker->workerId => $worker);
             Timer::delAll();
             self::setProcessTitle('WorkerMan: worker process  ' . $worker->name . ' ' . $worker->getSocketName());
@@ -929,7 +946,7 @@ class Worker
         // Get uid.
         $user_info = posix_getpwnam($this->user);
         if (!$user_info) {
-            self::log("Warning: User {$this->user} not exsits");
+            Yii::warning("Warning: User {$this->user} not exsits", 'workerman');
             return;
         }
         $uid = $user_info['uid'];
@@ -937,7 +954,7 @@ class Worker
         if ($this->group) {
             $group_info = posix_getgrnam($this->group);
             if (!$group_info) {
-                self::log("Warning: Group {$this->group} not exsits");
+                Yii::warning("Warning: Group {$this->group} not exsits", 'workerman');
                 return;
             }
             $gid = $group_info['gid'];
@@ -948,7 +965,7 @@ class Worker
         // Set uid and gid.
         if ($uid != posix_getuid() || $gid != posix_getgid()) {
             if (!posix_setgid($gid) || !posix_initgroups($user_info['name'], $gid) || !posix_setuid($uid)) {
-                self::log("Warning: change gid or uid fail.");
+                Yii::warning("Warning: change gid or uid fail.", 'workerman');
             }
         }
     }
@@ -983,7 +1000,7 @@ class Worker
             pcntl_signal_dispatch();
             // Suspends execution of the current process until a child has exited, or until a signal is delivered
             $status = 0;
-            $pid    = pcntl_wait($status, WUNTRACED);
+            $pid = pcntl_wait($status, WUNTRACED);
             // Calls signal handlers for pending signals again.
             pcntl_signal_dispatch();
             // If a child has already exited.
@@ -994,7 +1011,7 @@ class Worker
                         $worker = self::$_workers[$worker_id];
                         // Exit status.
                         if ($status !== 0) {
-                            self::log("worker[" . $worker->name . ":$pid] exit with status $status");
+                            Yii::info("worker[" . $worker->name . ":$pid] exit with status $status", 'workerman');
                         }
 
                         // For Statistics.
@@ -1007,7 +1024,7 @@ class Worker
                         unset(self::$_pidMap[$worker_id][$pid]);
 
                         // Mark id is available.
-                        $id                            = self::getId($worker_id, $pid);
+                        $id = self::getId($worker_id, $pid);
                         self::$_idMap[$worker_id][$id] = 0;
 
                         break;
@@ -1050,8 +1067,13 @@ class Worker
                 @unlink($address);
             }
         }
-        @unlink(self::$pidFile);
-        self::log("Workerman[" . basename(self::$_startFile) . "] has been stopped");
+        foreach (self::$_workers as $worker) {
+            $workermanModel = self::getWorkermanByName($worker->name);
+            if ($workermanModel) {
+                $workermanModel->delete();
+            }
+        }
+        Yii::info("Workerman[" . basename(self::$_startFile) . "] has been stopped", 'workerman');
         exit(0);
     }
 
@@ -1066,7 +1088,7 @@ class Worker
         if (self::$_masterPid === posix_getpid()) {
             // Set reloading state.
             if (self::$_status !== self::STATUS_RELOADING && self::$_status !== self::STATUS_SHUTDOWN) {
-                self::log("Workerman[" . basename(self::$_startFile) . "] reloading");
+                Yii::info("Workerman[" . basename(self::$_startFile) . "] reloading stopped", 'workerman');
                 self::$_status = self::STATUS_RELOADING;
             }
 
@@ -1127,14 +1149,16 @@ class Worker
     /**
      * Stop.
      *
-     * @return void
+     * @param bool $isKill 是否杀死进程
      */
-    public static function stopAll()
+    public static function stopAll($isKill = false)
     {
         self::$_status = self::STATUS_SHUTDOWN;
-        // For master process.
-        if (self::$_masterPid === posix_getpid()) {
-            self::log("Workerman[" . basename(self::$_startFile) . "] Stopping ...");
+
+        if ($isKill) {
+            posix_kill(self::$_masterPid, SIGINT);
+        } elseif (self::$_masterPid === posix_getpid()) { // For master process.
+            Yii::info("Workerman[" . basename(self::$_startFile) . "] Stopping ...", 'workerman');
             $worker_pid_array = self::getAllWorkerPids();
             // Send stop signal to all child processes.
             foreach ($worker_pid_array as $worker_pid) {
@@ -1208,7 +1232,7 @@ class Worker
 
         // For child processes.
         /** @var Worker $worker */
-        $worker           = current(self::$_workers);
+        $worker = current(self::$_workers);
         $wrker_status_str = posix_getpid() . "\t" . str_pad(round(memory_get_usage(true) / (1024 * 1024), 2) . "M",
                 7) . " " . str_pad($worker->getSocketName(),
                 self::$_maxSocketNameLength) . " " . str_pad(($worker->name === $worker->getSocketName() ? 'none' : $worker->name),
@@ -1229,7 +1253,7 @@ class Worker
     {
         if (self::STATUS_SHUTDOWN != self::$_status) {
             $error_msg = "WORKER EXIT UNEXPECTED ";
-            $errors    = error_get_last();
+            $errors = error_get_last();
             if ($errors && ($errors['type'] === E_ERROR ||
                     $errors['type'] === E_PARSE ||
                     $errors['type'] === E_CORE_ERROR ||
@@ -1238,7 +1262,7 @@ class Worker
             ) {
                 $error_msg .= self::getErrorType($errors['type']) . " {$errors['message']} in {$errors['file']} on line {$errors['line']}";
             }
-            self::log($error_msg);
+            Yii::error($error_msg, 'workerman');
         }
     }
 
@@ -1286,35 +1310,20 @@ class Worker
     }
 
     /**
-     * Log.
-     *
-     * @param string $msg
-     * @return void
-     */
-    protected static function log($msg)
-    {
-        $msg = $msg . "\n";
-        if (!self::$daemonize) {
-            echo $msg;
-        }
-        file_put_contents(self::$logFile, date('Y-m-d H:i:s') . " " . $msg, FILE_APPEND | LOCK_EX);
-    }
-
-    /**
      * Construct.
      *
      * @param string $socket_name
-     * @param array  $context_option
+     * @param array $context_option
      */
     public function __construct($socket_name = '', $context_option = array())
     {
         // Save all worker instances.
-        $this->workerId                  = spl_object_hash($this);
+        $this->workerId = spl_object_hash($this);
         self::$_workers[$this->workerId] = $this;
-        self::$_pidMap[$this->workerId]  = array();
+        self::$_pidMap[$this->workerId] = array();
 
         // Get autoload root path.
-        $backrace                = debug_backtrace();
+        $backrace = debug_backtrace();
         $this->_autoloadRootPath = dirname($backrace[0]['file']);
 
         // Context for socket.
@@ -1350,10 +1359,10 @@ class Worker
         list($scheme, $address) = explode(':', $this->_socketName, 2);
         // Check application layer protocol class.
         if (!isset(self::$_builtinTransports[$scheme])) {
-            $scheme         = ucfirst($scheme);
+            $scheme = ucfirst($scheme);
             $this->protocol = '\\Protocols\\' . $scheme;
             if (!class_exists($this->protocol)) {
-                $this->protocol = "\\Workerman\\Protocols\\$scheme";
+                $this->protocol = "\\wsl\\workerman\\Protocols\\$scheme";
                 if (!class_exists($this->protocol)) {
                     throw new Exception("class \\Protocols\\$scheme not exist");
                 }
@@ -1364,8 +1373,8 @@ class Worker
         }
 
         // Flag.
-        $flags  = $this->transport === 'udp' ? STREAM_SERVER_BIND : STREAM_SERVER_BIND | STREAM_SERVER_LISTEN;
-        $errno  = 0;
+        $flags = $this->transport === 'udp' ? STREAM_SERVER_BIND : STREAM_SERVER_BIND | STREAM_SERVER_LISTEN;
+        $errno = 0;
         $errmsg = '';
         // SO_REUSEPORT.
         if ($this->reusePort) {
@@ -1428,14 +1437,14 @@ class Worker
         self::$_status = self::STATUS_RUNNING;
 
         // Eegister shutdown function for checking errors.
-        register_shutdown_function(array("\\Workerman\\Worker", 'checkErrors'));
+        register_shutdown_function(array("\\wsl\\workerman\\Worker", 'checkErrors'));
 
         // Set autoload root path.
         Autoloader::setRootPath($this->_autoloadRootPath);
 
         // Create a global event loop.
         if (!self::$globalEvent) {
-            $eventLoopClass    = "\\Workerman\\Events\\" . ucfirst(self::getEventLoopName());
+            $eventLoopClass = "\\wsl\\workerman\\Events\\" . ucfirst(self::getEventLoopName());
             self::$globalEvent = new $eventLoopClass;
             // Register a listener to be notified when server socket is ready to read.
             if ($this->_socketName) {
@@ -1470,6 +1479,19 @@ class Worker
 
         // Main loop.
         self::$globalEvent->loop();
+    }
+
+    /**
+     * 获取指定名称model
+     *
+     * @param string $name 名称
+     * @return array|null|Workerman
+     */
+    protected static function getWorkermanByName($name)
+    {
+        Yii::$app->db->close();
+        Yii::$app->db->open();
+        return Workerman::find()->findByName($name)->one();
     }
 
     /**
@@ -1512,15 +1534,15 @@ class Worker
         }
 
         // TcpConnection.
-        $connection                         = new TcpConnection($new_socket, $remote_address);
+        $connection = new TcpConnection($new_socket, $remote_address);
         $this->connections[$connection->id] = $connection;
-        $connection->worker                 = $this;
-        $connection->protocol               = $this->protocol;
-        $connection->onMessage              = $this->onMessage;
-        $connection->onClose                = $this->onClose;
-        $connection->onError                = $this->onError;
-        $connection->onBufferDrain          = $this->onBufferDrain;
-        $connection->onBufferFull           = $this->onBufferFull;
+        $connection->worker = $this;
+        $connection->protocol = $this->protocol;
+        $connection->onMessage = $this->onMessage;
+        $connection->onClose = $this->onClose;
+        $connection->onError = $this->onError;
+        $connection->onBufferDrain = $this->onBufferDrain;
+        $connection->onBufferFull = $this->onBufferFull;
 
         // Try to emit onConnect callback.
         if ($this->onConnect) {
@@ -1549,11 +1571,11 @@ class Worker
             return false;
         }
         // UdpConnection.
-        $connection           = new UdpConnection($socket, $remote_address);
+        $connection = new UdpConnection($socket, $remote_address);
         $connection->protocol = $this->protocol;
         if ($this->onMessage) {
             if ($this->protocol) {
-                $parser      = $this->protocol;
+                $parser = $this->protocol;
                 $recv_buffer = $parser::decode($recv_buffer, $connection);
             }
             ConnectionInterface::$statistics['total_request']++;

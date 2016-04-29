@@ -11,9 +11,9 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman\Lib;
+namespace wsl\workerman\Lib;
 
-use Workerman\Events\EventInterface;
+use wsl\workerman\Events\EventInterface;
 use Exception;
 
 /**
@@ -39,14 +39,14 @@ class Timer
     /**
      * event
      *
-     * @var \Workerman\Events\EventInterface
+     * @var \wsl\workerman\Events\EventInterface
      */
     protected static $_event = null;
 
     /**
      * Init.
      *
-     * @param \Workerman\Events\EventInterface $event
+     * @param \wsl\workerman\Events\EventInterface $event
      * @return void
      */
     public static function init($event = null)
@@ -54,7 +54,7 @@ class Timer
         if ($event) {
             self::$_event = $event;
         } else {
-            pcntl_signal(SIGALRM, array('\Workerman\Lib\Timer', 'signalHandle'), false);
+            pcntl_signal(SIGALRM, array('\wsl\workerman\Lib\Timer', 'signalHandle'), false);
         }
     }
 

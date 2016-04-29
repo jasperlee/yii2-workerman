@@ -11,9 +11,9 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman\Protocols;
+namespace wsl\workerman\Protocols;
 
-use Workerman\Connection\TcpConnection;
+use wsl\workerman\Connection\TcpConnection;
 
 /**
  * http protocol

@@ -11,10 +11,10 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman;
+namespace wsl\workerman;
 
-use Workerman\Protocols\Http;
-use Workerman\Protocols\HttpCache;
+use wsl\workerman\Protocols\Http;
+use wsl\workerman\Protocols\HttpCache;
 
 /**
  *  WebServer.

@@ -11,10 +11,10 @@
  * @link      http://www.workerman.net/
  * @license   http://www.opensource.org/licenses/mit-license.php MIT License
  */
-namespace Workerman\Connection;
+namespace wsl\workerman\Connection;
 
-use Workerman\Events\EventInterface;
-use Workerman\Worker;
+use wsl\workerman\Events\EventInterface;
+use wsl\workerman\Worker;
 use Exception;
 
 /**
